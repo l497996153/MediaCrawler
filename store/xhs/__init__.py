@@ -16,10 +16,12 @@ from typing import List
 
 import config
 from var import source_keyword_var
+from tools import metrics
 
 from . import xhs_store_impl
 from .xhs_store_media import *
 from .xhs_store_impl import *
+from .xhs_note_folder_store import XhsNoteFolderStoreImplement
 
 
 class XhsStoreFactory:
@@ -28,13 +30,14 @@ class XhsStoreFactory:
         "db": XhsDbStoreImplement,
         "json": XhsJsonStoreImplement,
         "sqlite": XhsSqliteStoreImplement,
+        "folder": XhsNoteFolderStoreImplement,
     }
 
     @staticmethod
     def create_store() -> AbstractStore:
         store_class = XhsStoreFactory.STORES.get(config.SAVE_DATA_OPTION)
         if not store_class:
-            raise ValueError("[XhsStoreFactory.create_store] Invalid save option only supported csv or db or json or sqlite ...")
+            raise ValueError("[XhsStoreFactory.create_store] Invalid save option. Supported: csv, db, json, sqlite, folder ...")
         return store_class()
 
 
@@ -157,8 +160,10 @@ async def update_xhs_note_comment(note_id: str, comment_item: Dict):
         "parent_comment_id": target_comment.get("id", 0),  # 父评论id
         "last_modify_ts": utils.get_current_timestamp(),  # 最后更新时间戳（MediaCrawler程序生成的，主要用途在db存储的时候记录一条记录最新更新时间）
         "like_count": comment_item.get("like_count", 0),
+    "source_keyword": source_keyword_var.get(),  # 搜索关键词，用于按关键词分组存储
     }
-    utils.logger.info(f"[store.xhs.update_xhs_note_comment] xhs note comment:{local_db_item}")
+    if getattr(config, "ENABLE_COMMENT_LOG", True):
+        utils.logger.info(f"[store.xhs.update_xhs_note_comment] xhs note comment:{local_db_item}")
     await XhsStoreFactory.create_store().store_comment(local_db_item)
 
 
@@ -222,8 +227,26 @@ async def update_xhs_note_image(note_id, pic_content, extension_file_name):
     Returns:
 
     """
-
-    await XiaoHongShuImage().store_image({"notice_id": note_id, "pic_content": pic_content, "extension_file_name": extension_file_name})
+    if config.SAVE_DATA_OPTION == "folder":
+        from .xhs_note_folder_store import XhsNoteFolderImageStore
+        await XhsNoteFolderImageStore().store_image({
+            "notice_id": note_id,
+            "pic_content": pic_content,
+            "extension_file_name": extension_file_name,
+            "source_keyword": source_keyword_var.get(),
+        })
+    else:
+        await XiaoHongShuImage().store_image({
+            "notice_id": note_id,
+            "pic_content": pic_content,
+            "extension_file_name": extension_file_name
+        })
+    # 统计已下载字节数（图片）
+    try:
+        if isinstance(pic_content, (bytes, bytearray)):
+            metrics.add_downloaded_bytes(len(pic_content))
+    except Exception:
+        pass
 
 
 async def update_xhs_note_video(note_id, video_content, extension_file_name):
@@ -237,5 +260,23 @@ async def update_xhs_note_video(note_id, video_content, extension_file_name):
     Returns:
 
     """
-
-    await XiaoHongShuVideo().store_video({"notice_id": note_id, "video_content": video_content, "extension_file_name": extension_file_name})
+    if config.SAVE_DATA_OPTION == "folder":
+        from .xhs_note_folder_store import XhsNoteFolderVideoStore
+        await XhsNoteFolderVideoStore().store_video({
+            "notice_id": note_id,
+            "video_content": video_content,
+            "extension_file_name": extension_file_name,
+            "source_keyword": source_keyword_var.get(),
+        })
+    else:
+        await XiaoHongShuVideo().store_video({
+            "notice_id": note_id,
+            "video_content": video_content,
+            "extension_file_name": extension_file_name
+        })
+    # 统计已下载字节数（视频）
+    try:
+        if isinstance(video_content, (bytes, bytearray)):
+            metrics.add_downloaded_bytes(len(video_content))
+    except Exception:
+        pass
