@@ -1,3 +1,12 @@
+# -*- coding: utf-8 -*-
+# Copyright (c) 2025 relakkes@gmail.com
+#
+# This file is part of MediaCrawler project.
+# Repository: https://github.com/NanmiCoder/MediaCrawler/blob/main/store/bilibili/_store_impl.py
+# GitHub: https://github.com/NanmiCoder
+# Licensed under NON-COMMERCIAL LEARNING LICENSE 1.1
+#
+
 # 声明：本代码仅供学习和研究目的使用。使用者应遵守以下原则：
 # 1. 不得用于任何商业用途。
 # 2. 使用时应遵守目标平台的使用条款和robots.txt规则。
@@ -12,7 +21,7 @@
 # -*- coding: utf-8 -*-
 # @Author  : persist1@126.com
 # @Time    : 2025/9/5 19:34
-# @Desc    : B站存储实现类
+# @Desc    : Bilibili storage implementation class
 import asyncio
 import csv
 import json
@@ -31,13 +40,14 @@ from database.models import BilibiliVideoComment, BilibiliVideo, BilibiliUpInfo,
 from tools.async_file_writer import AsyncFileWriter
 from tools import utils, words
 from var import crawler_type_var
+from database.mongodb_store_base import MongoDBStoreBase
 
 
 class BiliCsvStoreImplement(AbstractStore):
     def __init__(self):
         self.file_writer = AsyncFileWriter(
             crawler_type=crawler_type_var.get(),
-            platform="bilibili"
+            platform="bili"
         )
 
     async def store_content(self, content_item: Dict):
@@ -220,7 +230,7 @@ class BiliJsonStoreImplement(AbstractStore):
     def __init__(self):
         self.file_writer = AsyncFileWriter(
             crawler_type=crawler_type_var.get(),
-            platform="bilibili"
+            platform="bili"
         )
 
     async def store_content(self, content_item: Dict):
@@ -297,3 +307,72 @@ class BiliJsonStoreImplement(AbstractStore):
 
 class BiliSqliteStoreImplement(BiliDbStoreImplement):
     pass
+
+
+class BiliMongoStoreImplement(AbstractStore):
+    """Bilibili MongoDB storage implementation"""
+
+    def __init__(self):
+        self.mongo_store = MongoDBStoreBase(collection_prefix="bilibili")
+
+    async def store_content(self, content_item: Dict):
+        """
+        Store video content to MongoDB
+        Args:
+            content_item: Video content data
+        """
+        video_id = content_item.get("video_id")
+        if not video_id:
+            return
+
+        await self.mongo_store.save_or_update(
+            collection_suffix="contents",
+            query={"video_id": video_id},
+            data=content_item
+        )
+        utils.logger.info(f"[BiliMongoStoreImplement.store_content] Saved video {video_id} to MongoDB")
+
+    async def store_comment(self, comment_item: Dict):
+        """
+        Store comment to MongoDB
+        Args:
+            comment_item: Comment data
+        """
+        comment_id = comment_item.get("comment_id")
+        if not comment_id:
+            return
+
+        await self.mongo_store.save_or_update(
+            collection_suffix="comments",
+            query={"comment_id": comment_id},
+            data=comment_item
+        )
+        utils.logger.info(f"[BiliMongoStoreImplement.store_comment] Saved comment {comment_id} to MongoDB")
+
+    async def store_creator(self, creator_item: Dict):
+        """
+        Store UP master information to MongoDB
+        Args:
+            creator_item: UP master data
+        """
+        user_id = creator_item.get("user_id")
+        if not user_id:
+            return
+
+        await self.mongo_store.save_or_update(
+            collection_suffix="creators",
+            query={"user_id": user_id},
+            data=creator_item
+        )
+        utils.logger.info(f"[BiliMongoStoreImplement.store_creator] Saved creator {user_id} to MongoDB")
+
+
+class BiliExcelStoreImplement:
+    """Bilibili Excel storage implementation - Global singleton"""
+
+    def __new__(cls, *args, **kwargs):
+        from store.excel_store_base import ExcelStoreBase
+        return ExcelStoreBase.get_instance(
+            platform="bilibili",
+            crawler_type=crawler_type_var.get()
+        )

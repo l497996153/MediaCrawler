@@ -1,3 +1,12 @@
+# -*- coding: utf-8 -*-
+# Copyright (c) 2025 relakkes@gmail.com
+#
+# This file is part of MediaCrawler project.
+# Repository: https://github.com/NanmiCoder/MediaCrawler/blob/main/store/kuaishou/_store_impl.py
+# GitHub: https://github.com/NanmiCoder
+# Licensed under NON-COMMERCIAL LEARNING LICENSE 1.1
+#
+
 # 声明：本代码仅供学习和研究目的使用。使用者应遵守以下原则：
 # 1. 不得用于任何商业用途。
 # 2. 使用时应遵守目标平台的使用条款和robots.txt规则。
@@ -12,7 +21,7 @@
 # -*- coding: utf-8 -*-
 # @Author  : persist1@126.com
 # @Time    : 2025/9/5 19:34
-# @Desc    : 快手存储实现类
+# @Desc    : Kuaishou storage implementation class
 import asyncio
 import csv
 import json
@@ -30,10 +39,11 @@ from database.db_session import get_session
 from database.models import KuaishouVideo, KuaishouVideoComment
 from tools import utils, words
 from var import crawler_type_var
+from database.mongodb_store_base import MongoDBStoreBase
 
 
 def calculate_number_of_files(file_store_path: str) -> int:
-    """计算数据保存文件的前部分排序数字，支持每次运行代码不写到同一个文件中
+    """Calculate the prefix sorting number for data save files, supporting writing to different files for each run
     Args:
         file_store_path;
     Returns:
@@ -158,3 +168,72 @@ class KuaishouJsonStoreImplement(AbstractStore):
 class KuaishouSqliteStoreImplement(KuaishouDbStoreImplement):
     async def store_creator(self, creator: Dict):
         pass
+
+
+class KuaishouMongoStoreImplement(AbstractStore):
+    """Kuaishou MongoDB storage implementation"""
+
+    def __init__(self):
+        self.mongo_store = MongoDBStoreBase(collection_prefix="kuaishou")
+
+    async def store_content(self, content_item: Dict):
+        """
+        Store video content to MongoDB
+        Args:
+            content_item: Video content data
+        """
+        video_id = content_item.get("video_id")
+        if not video_id:
+            return
+
+        await self.mongo_store.save_or_update(
+            collection_suffix="contents",
+            query={"video_id": video_id},
+            data=content_item
+        )
+        utils.logger.info(f"[KuaishouMongoStoreImplement.store_content] Saved video {video_id} to MongoDB")
+
+    async def store_comment(self, comment_item: Dict):
+        """
+        Store comment to MongoDB
+        Args:
+            comment_item: Comment data
+        """
+        comment_id = comment_item.get("comment_id")
+        if not comment_id:
+            return
+
+        await self.mongo_store.save_or_update(
+            collection_suffix="comments",
+            query={"comment_id": comment_id},
+            data=comment_item
+        )
+        utils.logger.info(f"[KuaishouMongoStoreImplement.store_comment] Saved comment {comment_id} to MongoDB")
+
+    async def store_creator(self, creator_item: Dict):
+        """
+        Store creator information to MongoDB
+        Args:
+            creator_item: Creator data
+        """
+        user_id = creator_item.get("user_id")
+        if not user_id:
+            return
+
+        await self.mongo_store.save_or_update(
+            collection_suffix="creators",
+            query={"user_id": user_id},
+            data=creator_item
+        )
+        utils.logger.info(f"[KuaishouMongoStoreImplement.store_creator] Saved creator {user_id} to MongoDB")
+
+
+class KuaishouExcelStoreImplement:
+    """Kuaishou Excel storage implementation - Global singleton"""
+
+    def __new__(cls, *args, **kwargs):
+        from store.excel_store_base import ExcelStoreBase
+        return ExcelStoreBase.get_instance(
+            platform="kuaishou",
+            crawler_type=crawler_type_var.get()
+        )
